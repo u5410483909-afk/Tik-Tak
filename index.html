@@ -4,79 +4,17 @@
 <meta charset="UTF-8">
 <title>Tik-Tak</title>
 <style>
-    body {
-        margin: 0;
-        font-family: Arial, sans-serif;
-        background: #f0f2f5;
-    }
-
-    header {
-        background: #ff2e63;
-        color: white;
-        padding: 15px;
-        text-align: center;
-        font-size: 22px;
-        font-weight: bold;
-    }
-
-    .container {
-        max-width: 500px;
-        margin: 20px auto;
-        padding: 10px;
-    }
-
-    input, textarea {
-        width: 100%;
-        padding: 10px;
-        border-radius: 10px;
-        border: 1px solid #ccc;
-        margin-bottom: 10px;
-    }
-
-    button {
-        padding: 10px;
-        border: none;
-        border-radius: 10px;
-        background: #ff2e63;
-        color: white;
-        cursor: pointer;
-        font-weight: bold;
-        width: 100%;
-    }
-
-    .post {
-        background: white;
-        padding: 15px;
-        margin-top: 15px;
-        border-radius: 15px;
-        box-shadow: 0 3px 10px rgba(0,0,0,0.1);
-    }
-
-    .post img {
-        width: 100%;
-        border-radius: 10px;
-        margin-top: 10px;
-    }
-
-    .username {
-        font-weight: bold;
-        color: #ff2e63;
-    }
-
-    .actions {
-        margin-top: 10px;
-        display: flex;
-        justify-content: space-between;
-    }
-
-    .like {
-        cursor: pointer;
-    }
-
-    .liked {
-        color: red;
-    }
-
+    body { margin: 0; font-family: Arial, sans-serif; background: #f0f2f5; }
+    header { background: #ff2e63; color: white; padding: 15px; text-align: center; font-size: 22px; font-weight: bold; }
+    .container { max-width: 500px; margin: 20px auto; padding: 10px; }
+    input, textarea { width: 100%; padding: 10px; border-radius: 10px; border: 1px solid #ccc; margin-bottom: 10px; }
+    button { padding: 10px; border: none; border-radius: 10px; background: #ff2e63; color: white; cursor: pointer; font-weight: bold; width: 100%; }
+    .post { background: white; padding: 15px; margin-top: 15px; border-radius: 15px; box-shadow: 0 3px 10px rgba(0,0,0,0.1); }
+    .post img { width: 100%; border-radius: 10px; margin-top: 10px; }
+    .username { font-weight: bold; color: #ff2e63; }
+    .actions { margin-top: 10px; display: flex; justify-content: space-between; }
+    .like { cursor: pointer; }
+    .liked { color: red; }
 </style>
 </head>
 <body>
@@ -95,16 +33,35 @@
     <div id="posts"></div>
 </div>
 
+<!-- Firebase -->
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-storage-compat.js"></script>
+
 <script>
+// Wstaw tutaj swój firebaseConfig
+const firebaseConfig = {
+  apiKey: "...",
+  authDomain: "...",
+  databaseURL: "...",
+  projectId: "...",
+  storageBucket: "...",
+  messagingSenderId: "...",
+  appId: "..."
+};
+
+// Inicjalizacja Firebase
+firebase.initializeApp(firebaseConfig);
+const db = firebase.database();
+const storage = firebase.storage();
+
 let currentUser = localStorage.getItem("tiktakUser");
 
-if (currentUser) {
-    startApp();
-}
+if (currentUser) startApp();
 
 function login() {
     let username = document.getElementById("usernameInput").value.trim();
-    if (username === "") return;
+    if (!username) return;
     localStorage.setItem("tiktakUser", username);
     currentUser = username;
     startApp();
@@ -119,74 +76,59 @@ function startApp() {
 function addPost() {
     let text = document.getElementById("postInput").value.trim();
     let imageFile = document.getElementById("imageInput").files[0];
+    if (!text && !imageFile) return;
 
-    if (text === "" && !imageFile) return;
-
-    let reader = new FileReader();
-    reader.onload = function() {
-        let imageData = imageFile ? reader.result : null;
-
-        let post = {
-            user: currentUser,
-            text: text,
-            image: imageData,
-            likes: 0
-        };
-
-        let posts = JSON.parse(localStorage.getItem("tiktakPosts")) || [];
-        posts.unshift(post);
-        localStorage.setItem("tiktakPosts", JSON.stringify(posts));
-
-        document.getElementById("postInput").value = "";
-        document.getElementById("imageInput").value = "";
-        loadPosts();
-    };
-
+    const newPostRef = db.ref("posts").push();
     if (imageFile) {
-        reader.readAsDataURL(imageFile);
+        const storageRef = storage.ref("images/" + Date.now() + "_" + imageFile.name);
+        storageRef.put(imageFile).then(() => {
+            storageRef.getDownloadURL().then(url => {
+                newPostRef.set({ user: currentUser, text, image: url, likes: 0 });
+                document.getElementById("postInput").value = "";
+                document.getElementById("imageInput").value = "";
+            });
+        });
     } else {
-        reader.onload();
+        newPostRef.set({ user: currentUser, text, image: null, likes: 0 });
+        document.getElementById("postInput").value = "";
     }
 }
 
 function loadPosts() {
-    let postsContainer = document.getElementById("posts");
+    const postsContainer = document.getElementById("posts");
     postsContainer.innerHTML = "";
 
-    let posts = JSON.parse(localStorage.getItem("tiktakPosts")) || [];
+    db.ref("posts").orderByKey().on("value", snapshot => {
+        postsContainer.innerHTML = "";
+        snapshot.forEach(child => {
+            const post = child.val();
+            const key = child.key;
 
-    posts.forEach((post, index) => {
-        let postDiv = document.createElement("div");
-        postDiv.className = "post";
-
-        postDiv.innerHTML = `
-            <div class="username">@${post.user}</div>
-            <p>${post.text}</p>
-            ${post.image ? `<img src="${post.image}">` : ""}
-            <div class="actions">
-                <span class="like ${post.likes > 0 ? "liked" : ""}" onclick="likePost(${index})">
-                    ❤️ ${post.likes}
-                </span>
-                <span onclick="deletePost(${index})" style="cursor:pointer;">🗑</span>
-            </div>
-        `;
-
-        postsContainer.appendChild(postDiv);
+            const postDiv = document.createElement("div");
+            postDiv.className = "post";
+            postDiv.innerHTML = `
+                <div class="username">@${post.user}</div>
+                <p>${post.text}</p>
+                ${post.image ? `<img src="${post.image}">` : ""}
+                <div class="actions">
+                    <span class="like ${post.likes > 0 ? "liked" : ""}" onclick="likePost('${key}')">
+                        ❤️ ${post.likes}
+                    </span>
+                    ${post.user === currentUser ? `<span onclick="deletePost('${key}')" style="cursor:pointer;">🗑</span>` : ""}
+                </div>
+            `;
+            postsContainer.appendChild(postDiv);
+        });
     });
 }
 
-function likePost(index) {
-    let posts = JSON.parse(localStorage.getItem("tiktakPosts"));
-    posts[index].likes++;
-    localStorage.setItem("tiktakPosts", JSON.stringify(posts));
-    loadPosts();
+function likePost(key) {
+    const likeRef = db.ref("posts/" + key + "/likes");
+    likeRef.transaction(likes => (likes || 0) + 1);
 }
 
-function deletePost(index) {
-    let posts = JSON.parse(localStorage.getItem("tiktakPosts"));
-    posts.splice(index, 1);
-    localStorage.setItem("tiktakPosts", JSON.stringify(posts));
-    loadPosts();
+function deletePost(key) {
+    db.ref("posts/" + key).remove();
 }
 </script>
 
