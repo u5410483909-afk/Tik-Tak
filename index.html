@@ -37,6 +37,7 @@
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-storage-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
 
 <script>
 // Wstaw tutaj swój firebaseConfig
@@ -50,22 +51,32 @@ const firebaseConfig = {
   appId: "..."
 };
 
-// Inicjalizacja Firebase
 firebase.initializeApp(firebaseConfig);
 const db = firebase.database();
 const storage = firebase.storage();
+const auth = firebase.auth();
 
-let currentUser = localStorage.getItem("tiktakUser");
-
-if (currentUser) startApp();
+let currentUser = null;
 
 function login() {
     let username = document.getElementById("usernameInput").value.trim();
     if (!username) return;
-    localStorage.setItem("tiktakUser", username);
-    currentUser = username;
-    startApp();
+
+    // Logowanie anonimowe + zapis nicku
+    auth.signInAnonymously().then(userCredential => {
+        currentUser = { uid: userCredential.user.uid, nickname: username };
+        startApp();
+    }).catch(error => {
+        alert("Błąd logowania: " + error.message);
+    });
 }
+
+auth.onAuthStateChanged(user => {
+    if (user && !currentUser) {
+        currentUser = { uid: user.uid, nickname: "Anonim" };
+        startApp();
+    }
+});
 
 function startApp() {
     document.getElementById("loginBox").style.display = "none";
@@ -83,21 +94,19 @@ function addPost() {
         const storageRef = storage.ref("images/" + Date.now() + "_" + imageFile.name);
         storageRef.put(imageFile).then(() => {
             storageRef.getDownloadURL().then(url => {
-                newPostRef.set({ user: currentUser, text, image: url, likes: 0 });
+                newPostRef.set({ userId: currentUser.uid, user: currentUser.nickname, text, image: url, likes: 0 });
                 document.getElementById("postInput").value = "";
                 document.getElementById("imageInput").value = "";
             });
         });
     } else {
-        newPostRef.set({ user: currentUser, text, image: null, likes: 0 });
+        newPostRef.set({ userId: currentUser.uid, user: currentUser.nickname, text, image: null, likes: 0 });
         document.getElementById("postInput").value = "";
     }
 }
 
 function loadPosts() {
     const postsContainer = document.getElementById("posts");
-    postsContainer.innerHTML = "";
-
     db.ref("posts").orderByKey().on("value", snapshot => {
         postsContainer.innerHTML = "";
         snapshot.forEach(child => {
@@ -114,10 +123,10 @@ function loadPosts() {
                     <span class="like ${post.likes > 0 ? "liked" : ""}" onclick="likePost('${key}')">
                         ❤️ ${post.likes}
                     </span>
-                    ${post.user === currentUser ? `<span onclick="deletePost('${key}')" style="cursor:pointer;">🗑</span>` : ""}
+                    ${post.userId === currentUser.uid ? `<span onclick="deletePost('${key}')" style="cursor:pointer;">🗑</span>` : ""}
                 </div>
             `;
-            postsContainer.appendChild(postDiv);
+            postsContainer.prepend(postDiv);
         });
     });
 }
