@@ -1,0 +1,194 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+<meta charset="UTF-8">
+<title>Tik-Tak</title>
+<style>
+    body {
+        margin: 0;
+        font-family: Arial, sans-serif;
+        background: #f0f2f5;
+    }
+
+    header {
+        background: #ff2e63;
+        color: white;
+        padding: 15px;
+        text-align: center;
+        font-size: 22px;
+        font-weight: bold;
+    }
+
+    .container {
+        max-width: 500px;
+        margin: 20px auto;
+        padding: 10px;
+    }
+
+    input, textarea {
+        width: 100%;
+        padding: 10px;
+        border-radius: 10px;
+        border: 1px solid #ccc;
+        margin-bottom: 10px;
+    }
+
+    button {
+        padding: 10px;
+        border: none;
+        border-radius: 10px;
+        background: #ff2e63;
+        color: white;
+        cursor: pointer;
+        font-weight: bold;
+        width: 100%;
+    }
+
+    .post {
+        background: white;
+        padding: 15px;
+        margin-top: 15px;
+        border-radius: 15px;
+        box-shadow: 0 3px 10px rgba(0,0,0,0.1);
+    }
+
+    .post img {
+        width: 100%;
+        border-radius: 10px;
+        margin-top: 10px;
+    }
+
+    .username {
+        font-weight: bold;
+        color: #ff2e63;
+    }
+
+    .actions {
+        margin-top: 10px;
+        display: flex;
+        justify-content: space-between;
+    }
+
+    .like {
+        cursor: pointer;
+    }
+
+    .liked {
+        color: red;
+    }
+
+</style>
+</head>
+<body>
+
+<header>Tik-Tak 🔥</header>
+
+<div class="container" id="loginBox">
+    <input type="text" id="usernameInput" placeholder="Podaj swój nick">
+    <button onclick="login()">Zaloguj się</button>
+</div>
+
+<div class="container" id="app" style="display:none;">
+    <textarea id="postInput" rows="3" placeholder="Co nowego?"></textarea>
+    <input type="file" id="imageInput" accept="image/*">
+    <button onclick="addPost()">Opublikuj</button>
+    <div id="posts"></div>
+</div>
+
+<script>
+let currentUser = localStorage.getItem("tiktakUser");
+
+if (currentUser) {
+    startApp();
+}
+
+function login() {
+    let username = document.getElementById("usernameInput").value.trim();
+    if (username === "") return;
+    localStorage.setItem("tiktakUser", username);
+    currentUser = username;
+    startApp();
+}
+
+function startApp() {
+    document.getElementById("loginBox").style.display = "none";
+    document.getElementById("app").style.display = "block";
+    loadPosts();
+}
+
+function addPost() {
+    let text = document.getElementById("postInput").value.trim();
+    let imageFile = document.getElementById("imageInput").files[0];
+
+    if (text === "" && !imageFile) return;
+
+    let reader = new FileReader();
+    reader.onload = function() {
+        let imageData = imageFile ? reader.result : null;
+
+        let post = {
+            user: currentUser,
+            text: text,
+            image: imageData,
+            likes: 0
+        };
+
+        let posts = JSON.parse(localStorage.getItem("tiktakPosts")) || [];
+        posts.unshift(post);
+        localStorage.setItem("tiktakPosts", JSON.stringify(posts));
+
+        document.getElementById("postInput").value = "";
+        document.getElementById("imageInput").value = "";
+        loadPosts();
+    };
+
+    if (imageFile) {
+        reader.readAsDataURL(imageFile);
+    } else {
+        reader.onload();
+    }
+}
+
+function loadPosts() {
+    let postsContainer = document.getElementById("posts");
+    postsContainer.innerHTML = "";
+
+    let posts = JSON.parse(localStorage.getItem("tiktakPosts")) || [];
+
+    posts.forEach((post, index) => {
+        let postDiv = document.createElement("div");
+        postDiv.className = "post";
+
+        postDiv.innerHTML = `
+            <div class="username">@${post.user}</div>
+            <p>${post.text}</p>
+            ${post.image ? `<img src="${post.image}">` : ""}
+            <div class="actions">
+                <span class="like ${post.likes > 0 ? "liked" : ""}" onclick="likePost(${index})">
+                    ❤️ ${post.likes}
+                </span>
+                <span onclick="deletePost(${index})" style="cursor:pointer;">🗑</span>
+            </div>
+        `;
+
+        postsContainer.appendChild(postDiv);
+    });
+}
+
+function likePost(index) {
+    let posts = JSON.parse(localStorage.getItem("tiktakPosts"));
+    posts[index].likes++;
+    localStorage.setItem("tiktakPosts", JSON.stringify(posts));
+    loadPosts();
+}
+
+function deletePost(index) {
+    let posts = JSON.parse(localStorage.getItem("tiktakPosts"));
+    posts.splice(index, 1);
+    localStorage.setItem("tiktakPosts", JSON.stringify(posts));
+    loadPosts();
+}
+</script>
+
+</body>
+</html>
